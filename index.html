@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>全球 GNSS 测站与 ADS-B 干扰地图</title>
+  <style>
+    :root{--ink:#16253a;--muted:#65758a;--line:#d8e0e9;--paper:#f6f8fb;--panel:#fff;--teal:#06a9a5;--yellow:#f5d328;--orange:#ef8e2f;--red:#d8483d;--deepred:#8c2c32;--purple:#7651a6}
+    *{box-sizing:border-box} body{margin:0;font:14px/1.45 system-ui,"Microsoft YaHei",sans-serif;color:var(--ink);background:var(--paper)}
+    main{display:grid;grid-template-columns:300px 1fr;min-height:100vh} aside{background:var(--panel);padding:20px;border-right:1px solid var(--line)} h1{font-size:20px;line-height:1.25;margin:0 0 8px} h2{font-size:15px;margin:22px 0 8px}.subtle,.note{color:var(--muted)}.note{font-size:12px}.legend{display:grid;gap:8px;margin:10px 0}.row{display:flex;align-items:center;gap:8px}.legend-symbol{width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;flex:none}.place-key{width:6px;height:6px;background:#536b7f}.triangle{width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:14px solid #06a9a5}.diamond{width:11px;height:11px;background:#111;transform:rotate(45deg)}.hex{width:17px;height:17px;transform:rotate(30deg);border-radius:3px;flex:none}.rule{border:0;border-top:1px solid var(--line);margin:18px 0}.warning{padding:10px;background:#f2f6f9;border-radius:7px;font-size:12px;color:#4b5d70}.switch{display:block;margin:10px 0;cursor:pointer}.stats{font-variant-numeric:tabular-nums;font-size:12px;color:var(--muted)}
+    #map{position:relative;min-width:0;background:#eaf0f5;user-select:none;-webkit-user-select:none}#map *{user-select:none;-webkit-user-select:none}svg{display:block;width:100%;height:100vh;shape-rendering:geometricPrecision;text-rendering:geometricPrecision;touch-action:none;cursor:grab}svg.is-dragging{cursor:grabbing}.country{fill:#f9fbfc;stroke:#bdc9d5;stroke-width:.55;vector-effect:non-scaling-stroke}.rfi{stroke:#8b3432;stroke-width:.2;fill-opacity:.72;vector-effect:non-scaling-stroke}.station{fill:var(--teal);stroke:white;stroke-width:.85;pointer-events:none}.event-halo{fill:#fff;stroke:#111}.event-point{fill:#111}.tooltip{position:absolute;pointer-events:none;background:#142238;color:#fff;padding:8px 10px;border-radius:6px;font-size:12px;max-width:240px;opacity:0;transition:opacity .12s;z-index:20}.place-label{fill:#31465d;pointer-events:none;font-size:11px;font-weight:500;paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:round}.place-dot{fill:#536b7f;stroke:#fff;stroke-width:.8px;pointer-events:none}.footer{font-size:11px;color:var(--muted);margin-top:22px}
+    @media(max-width:760px){main{grid-template-columns:1fr;grid-template-rows:auto minmax(420px,1fr)}aside{border-right:0;border-bottom:1px solid var(--line)}svg{height:65vh}}
+  </style>
+</head>
+<body>
+<main>
+  <aside>
+    <h1>全球 GNSS 测站与 ADS-B 干扰</h1>
+    <label for="date"><b>日期（UTC）</b></label>
+    <input id="date" type="date" value="2026-09-10" style="width:100%;margin:7px 0;padding:7px" aria-label="选择 Stanford RFI 日期">
+    <p id="dateStatus" class="subtle">当前显示：2026-09-10</p>
+    <label class="switch"><input id="showRfi" type="checkbox" checked> 显示异常 ADS-B H3 六边形</label>
+    <label class="switch"><input id="showStations" type="checkbox" checked> 显示 IGS 测站</label>
+    <label class="switch"><input id="showEvents" type="checkbox" checked> 显示 Stanford 异常事件中心</label>
+    <label class="switch"><input id="showConflict" type="checkbox" disabled> 显示战区事件（尚未导入）</label>
+    <p class="note">战区层刻意保持关闭；真实 UCDP 事件数据需要授权 token，不能用猜测或新闻摘要替代。</p>
+    <hr class="rule">
+    <h2>图例</h2>
+    <div class="legend">
+      <div class="row"><span class="legend-symbol"><span class="place-key"></span></span>标志性城市</div>
+      <div class="row"><span class="legend-symbol"><span class="triangle"></span></span>IGS 测站</div>
+      <div class="row"><span class="legend-symbol"><span class="diamond"></span></span>Stanford jamming 异常事件中心</div>
+      <div class="row"><span class="hex" style="background:#f5d328"></span>低 NIC 2–5%</div>
+      <div class="row"><span class="hex" style="background:#ef8e2f"></span>低 NIC 5–10%</div>
+      <div class="row"><span class="hex" style="background:#d8483d"></span>低 NIC 10–20%</div>
+      <div class="row"><span class="hex" style="background:#8c2c32"></span>低 NIC ≥20%</div>
+    </div>
+    <hr class="rule">
+    <p id="stats" class="stats">载入中…</p>
+    <div class="warning">六边形反映飞机 ADS-B 报告的 GNSS 质量异常比例；它不是某一个 IGS 测站的实测干扰结论。点击青色三角形可查看测站元数据。</div>
+    <p class="footer">国界：Natural Earth / world-atlas。测站：IGS Network。干扰：Stanford GPS Lab rfi.stanford.edu（CC BY-NC 4.0）。</p>
+  </aside>
+  <section id="map" aria-label="全球 IGS 测站与 RFI 六边形地图"><svg id="svg" role="img" aria-label="全球 IGS 测站与 ADS-B 干扰六边形"></svg><div id="tip" class="tooltip"></div></section>
+</main>
+<script src="global-map-data/d3-array.min.js"></script>
+<script src="global-map-data/d3-geo.min.js"></script>
+<script src="global-map-data/topojson-client.min.js"></script>
+<script src="global-map-data/world-countries-50m.js"></script>
+<script src="global-map-data/map-places.js"></script>
+<script src="global-map-data/igs-stations.js"></script>
+<script src="global-map-data/rfi-2026-09-10-alerts.js"></script>
+<script>
+  const svg=document.querySelector('#svg'),mapEl=document.querySelector('#map'),tip=document.querySelector('#tip'); let selectedStation=null,activeRfi=RFI_GEOJSON;
+  const ns='http://www.w3.org/2000/svg'; let projection,path,rfiGroup,stationGroup,eventGroup,placeGroup,viewport,loadSerial=0; let view={x:0,y:0,k:1},dragStart=null;
+  const color=r=>r<.05?'#f5d328':r<.10?'#ef8e2f':r<.20?'#d8483d':'#8c2c32';
+  function el(name,attrs={}){const n=document.createElementNS(ns,name);Object.entries(attrs).forEach(([k,v])=>n.setAttribute(k,v));return n}
+  function makeRfi(data){const g=el('g',{id:'rfi'});data.features.forEach(f=>{const p=el('path',{d:path(f),class:'rfi',fill:color(f.properties.ratio)});p.addEventListener('mouseenter',e=>{const q=f.properties;tip.innerHTML=`<b>Stanford ADS-B H3 网格</b><br>低 NIC：${q.lowQualityCount}/${q.totalAircraftCount}<br>异常比例：${(q.ratio*100).toFixed(1)}%<br><span style="opacity:.75">${q.h3Index}</span>`;tip.style.opacity=1});p.addEventListener('mousemove',e=>{const b=mapEl.getBoundingClientRect();tip.style.left=(e.clientX-b.left+12)+'px';tip.style.top=(e.clientY-b.top+12)+'px'});p.addEventListener('mouseleave',()=>tip.style.opacity=0);g.append(p)});return g}
+  function makeEvents(data){const g=el('g',{id:'events'});data.features.forEach(f=>{const [x,y]=projection(f.geometry.coordinates),halo=el('path',{class:'event-halo','pointer-events':'none'}),c=el('path',{class:'event-point','pointer-events':'none'}),hit=el('circle',{class:'event-hit',fill:'#000',opacity:'.001','pointer-events':'all'});[halo,c,hit].forEach(n=>{n.dataset.x=x;n.dataset.y=y});const show=e=>{const p=f.properties,b=mapEl.getBoundingClientRect();tip.innerHTML=`<b>Stanford jamming 异常事件</b><br>事件 ID：${p.eventId}<br>受影响飞机：${p.numFltAffected}<br>开始：${p.startTime}<br>结束：${p.endTime}`;tip.style.left=(e.clientX-b.left+12)+'px';tip.style.top=(e.clientY-b.top+12)+'px';tip.style.opacity=1};hit.addEventListener('mouseenter',show);hit.addEventListener('mousemove',show);hit.addEventListener('mouseleave',()=>tip.style.opacity=0);g.append(halo,c,hit)});return g}
+  const placeNamesZh={London:'伦敦',Moscow:'莫斯科',Kyiv:'基辅',Cairo:'开罗',Tehran:'德黑兰',Beijing:'北京',Tokyo:'东京','New Delhi':'新德里',Washington:'华盛顿',Brasilia:'巴西利亚','Cape Town':'开普敦',Canberra:'堪培拉',Paris:'巴黎',Berlin:'柏林',Rome:'罗马',Madrid:'马德里',Lisbon:'里斯本',Athens:'雅典',Istanbul:'伊斯坦布尔',Warsaw:'华沙',Minsk:'明斯克',Baghdad:'巴格达',Riyadh:'利雅得',Jerusalem:'耶路撒冷',Dubai:'迪拜',Mumbai:'孟买',Kolkata:'加尔各答',Bangkok:'曼谷',Singapore:'新加坡',Jakarta:'雅加达',Seoul:'首尔',Shanghai:'上海','Hong Kong':'香港',Taipei:'台北',Manila:'马尼拉',Hanoi:'河内',Sydney:'悉尼',Melbourne:'墨尔本','Mexico City':'墨西哥城','New York':'纽约','Los Angeles':'洛杉矶',Chicago:'芝加哥',Toronto:'多伦多',Vancouver:'温哥华','Buenos Aires':'布宜诺斯艾利斯',Lima:'利马',Santiago:'圣地亚哥',Bogota:'波哥大',Lagos:'拉各斯',Nairobi:'内罗毕','Addis Ababa':'亚的斯亚贝巴',Johannesburg:'约翰内斯堡'};
+  function updatePlaceLabels(){if(!placeGroup||!projection)return;placeGroup.replaceChildren();const w=mapEl.clientWidth,h=mapEl.clientHeight,maxMinZoom=2+Math.log2(view.k)*1.65,boxes=[];for(const p of MAP_PLACES){if(p[4]>maxMinZoom)break;const projected=projection([p[0],p[1]]),sx=view.x+view.k*projected[0],sy=view.y+view.k*projected[1];if(sx<8||sx>w-8||sy<8||sy>h-8)continue;const name=placeNamesZh[p[2]]||p[2],width=Math.min(150,8+[...name].length*6.4),box={x1:sx+4,y1:sy-8,x2:sx+4+width,y2:sy+8};if(box.x2>w-3||boxes.some(b=>box.x1<b.x2&&box.x2>b.x1&&box.y1<b.y2&&box.y2>b.y1))continue;boxes.push(box);const size=p[5]?4.4:3,dot=el('rect',{x:sx-size/2,y:sy-size/2,width:size,height:size,class:'place-dot'}),label=el('text',{x:sx+5,y:sy+4,class:'place-label'});label.textContent=name;placeGroup.append(dot,label)}}
+  function applyTransform(){if(!viewport)return;viewport.setAttribute('transform',`translate(${view.x} ${view.y}) scale(${view.k})`);[stationGroup,eventGroup].forEach(g=>g?.querySelectorAll('[data-x]').forEach(c=>{const sx=(view.x+view.k*Number(c.dataset.x)).toFixed(2),sy=(view.y+view.k*Number(c.dataset.y)).toFixed(2);if(c.tagName==='circle'){c.setAttribute('cx',sx);c.setAttribute('cy',sy)}else c.setAttribute('transform',`translate(${sx} ${sy})`);if(c.classList.contains('station-hit')){c.setAttribute('r','12')}else if(c.classList.contains('station')){c.setAttribute('d','M0 -3.8 L3.5 2.7 L-3.5 2.7 Z')}else if(c.classList.contains('event-hit')){c.setAttribute('r','10')}else if(c.classList.contains('event-halo')){const s=view.k>=4?3.5:4.7;c.setAttribute('d',`M0 ${-s} L${s} 0 L0 ${s} L${-s} 0 Z`);c.setAttribute('stroke-width',view.k>=4?'.8':'1')}else if(c.classList.contains('event-point')){const s=view.k>=4?1.8:2.6;c.setAttribute('d',`M0 ${-s} L${s} 0 L0 ${s} L${-s} 0 Z`)}}));updatePlaceLabels()}
+  function draw(){const w=mapEl.clientWidth,h=mapEl.clientHeight;svg.setAttribute('viewBox',`0 0 ${w} ${h}`);svg.innerHTML='';projection=d3.geoEqualEarth().fitSize([w,h],{type:'Sphere'});path=d3.geoPath(projection);viewport=el('g',{id:'viewport'});svg.append(viewport);
+    viewport.append(el('path',{d:path({type:'Sphere'}),fill:'#dfeaf2'}));
+    const countries=topojson.feature(WORLD_TOPOLOGY,WORLD_TOPOLOGY.objects.countries).features; const cg=el('g');countries.forEach(f=>cg.append(el('path',{d:path(f),class:'country'})));viewport.append(cg);
+    rfiGroup=makeRfi(activeRfi);viewport.append(rfiGroup);
+    stationGroup=el('g',{id:'stations'});IGS_STATIONS.features.forEach(f=>{const [x,y]=projection(f.geometry.coordinates);const c=el('path',{class:'station'});c.dataset.x=x;c.dataset.y=y;const hit=el('circle',{r:12,class:'station-hit',fill:'#000',opacity:'.001','pointer-events':'all'});hit.dataset.x=x;hit.dataset.y=y;const show=e=>{const p=f.properties,b=mapEl.getBoundingClientRect();tip.innerHTML=`<b>${p.code}</b><br>国家/地区：${p.country||'—'}<br>接收机：${p.receiver||'—'}<br>观测系统：${p.systems||'—'}<br>最后数据：${p.lastData||'—'}`;tip.style.left=(e.clientX-b.left+12)+'px';tip.style.top=(e.clientY-b.top+12)+'px';tip.style.opacity=1};hit.addEventListener('mouseenter',e=>show(e));hit.addEventListener('mousemove',e=>show(e));hit.addEventListener('mouseleave',()=>{if(!selectedStation)tip.style.opacity=0});hit.addEventListener('click',e=>{e.stopPropagation();selectedStation=f;show(e)});stationGroup.append(c,hit)});svg.append(stationGroup);eventGroup=makeEvents({type:'FeatureCollection',features:[]});svg.append(eventGroup);placeGroup=el('g',{id:'places'});svg.append(placeGroup);applyTransform();
+  }
+  document.querySelector('#showRfi').addEventListener('change',e=>rfiGroup.style.display=e.target.checked?'':'none');document.querySelector('#showStations').addEventListener('change',e=>stationGroup.style.display=e.target.checked?'':'none');document.querySelector('#showEvents').addEventListener('change',e=>eventGroup.style.display=e.target.checked?'':'none');
+  function updateStats(){document.querySelector('#stats').textContent=`已加载 ${IGS_STATIONS.features.length} 个 IGS 测站；显示 ${activeRfi.features.length.toLocaleString()} 个异常 H3 六边形和 ${eventGroup?.querySelectorAll('.event-point').length||0} 个异常事件中心。`};updateStats();
+  async function loadDate(date){const serial=++loadSerial,status=document.querySelector('#dateStatus');status.textContent=`正在读取 ${date}…`;try{const [rr,er]=await Promise.all([fetch(`/api/rfi?date=${encodeURIComponent(date)}`),fetch(`/api/events?date=${encodeURIComponent(date)}`)]);if(!rr.ok||!er.ok)throw new Error('数据源未返回该日结果');const [rfi,events]=await Promise.all([rr.json(),er.json()]);if(serial!==loadSerial)return;activeRfi=rfi;const nextRfi=makeRfi(activeRfi),nextEvents=makeEvents(events);rfiGroup.replaceWith(nextRfi);eventGroup.replaceWith(nextEvents);rfiGroup=nextRfi;eventGroup=nextEvents;applyTransform();updateStats();status.textContent=`当前显示：${date}（Stanford daily / UTC）`}catch(err){if(serial===loadSerial)status.textContent='日期加载失败：请确认该日 Stanford 数据已经发布。'}}
+  document.querySelector('#date').addEventListener('change',e=>loadDate(e.target.value));
+  svg.addEventListener('wheel',e=>{e.preventDefault();const rect=svg.getBoundingClientRect(),px=e.clientX-rect.left,py=e.clientY-rect.top,old=view.k;view.k=Math.max(1,Math.min(80,old*(e.deltaY<0?1.3:.77)));view.x=px-(px-view.x)*(view.k/old);view.y=py-(py-view.y)*(view.k/old);applyTransform()},{passive:false});
+  svg.addEventListener('selectstart',e=>e.preventDefault());svg.addEventListener('dragstart',e=>e.preventDefault());svg.addEventListener('pointerdown',e=>{e.preventDefault();dragStart={x:e.clientX,y:e.clientY,ox:view.x,oy:view.y};svg.classList.add('is-dragging');svg.setPointerCapture(e.pointerId)});svg.addEventListener('pointermove',e=>{if(!dragStart)return;e.preventDefault();view.x=dragStart.ox+e.clientX-dragStart.x;view.y=dragStart.oy+e.clientY-dragStart.y;applyTransform()});const endDrag=()=>{dragStart=null;svg.classList.remove('is-dragging')};svg.addEventListener('pointerup',endDrag);svg.addEventListener('pointercancel',endDrag);svg.addEventListener('lostpointercapture',endDrag);svg.addEventListener('click',e=>{if(e.target===svg){selectedStation=null;tip.style.opacity=0}});svg.addEventListener('dblclick',()=>{view={x:0,y:0,k:1};applyTransform()});
+  new ResizeObserver(draw).observe(mapEl);draw();loadDate(document.querySelector('#date').value);
+</script>
+</body>
+</html>

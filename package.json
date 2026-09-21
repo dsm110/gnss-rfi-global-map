@@ -1,0 +1,17 @@
+{
+  "name": "gnss-rfi-public-map",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Global IGS station and Stanford ADS-B GNSS interference map",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "h3-js": "4.1.0"
+  }
+}

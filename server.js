@@ -2,9 +2,16 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const h3 = require('h3-js');
+const zlib = require('zlib');
 const root = path.resolve(__dirname);
 const cache = new Map();
 const port = Number(process.env.PORT) || 8765;
+let conflictByDate = {};
+try {
+  const packed = fs.readFileSync(path.join(root,'global-map-data','ucdp-ged261-by-date.json.gz'));
+  conflictByDate = JSON.parse(zlib.gunzipSync(packed)).byDate || {};
+  console.log(`Loaded UCDP conflict index for ${Object.keys(conflictByDate).length} dates`);
+} catch (error) { console.error('UCDP conflict index unavailable', error.message); }
 const mime = {'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.css':'text/css; charset=utf-8'};
 function send(res,status,body,type='text/plain; charset=utf-8'){res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store'});res.end(body)}
 function wait(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
@@ -31,6 +38,12 @@ http.createServer(async(req,res)=>{
       try{const [y,m,d]=date.split('-');const remote=`http://waas-nas.stanford.edu/data/jamming/${y}/${m}/${d}/events.json`;cache.set(key,eventsGeojson(await fetchRemoteJson(remote)))}catch(e){console.error('Stanford events fetch failed',e);return send(res,502,`无法读取 Stanford 事件：${e.message}`)}
     }
     return send(res,200,JSON.stringify(cache.get(key)),'application/geo+json; charset=utf-8');
+  }
+  if(u.pathname==='/api/conflicts'){
+    const date=u.searchParams.get('date')||'';
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return send(res,400,'日期格式应为 YYYY-MM-DD');
+    const features=(conflictByDate[date]||[]).map(e=>({type:'Feature',geometry:{type:'Point',coordinates:[e[0],e[1]]},properties:{id:e[2],type:e[3],deaths:e[4],country:e[5],place:e[6],sideA:e[7],sideB:e[8],start:e[9],end:e[10]}}));
+    return send(res,200,JSON.stringify({type:'FeatureCollection',features,source:'UCDP GED 26.1'}),'application/geo+json; charset=utf-8');
   }
   const requested=path.normalize(path.join(root,decodeURIComponent(u.pathname==='/'?'/index.html':u.pathname)));
   if(!requested.startsWith(root))return send(res,403,'Forbidden');

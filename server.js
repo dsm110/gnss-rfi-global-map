@@ -6,12 +6,16 @@ const zlib = require('zlib');
 const root = path.resolve(__dirname);
 const cache = new Map();
 const port = Number(process.env.PORT) || 8765;
-let conflictByDate = {};
-try {
-  const packed = fs.readFileSync(path.join(root,'global-map-data','ucdp-ged261-by-date.json.gz'));
-  conflictByDate = JSON.parse(zlib.gunzipSync(packed)).byDate || {};
-  console.log(`Loaded UCDP conflict index for ${Object.keys(conflictByDate).length} dates`);
-} catch (error) { console.error('UCDP conflict index unavailable', error.message); }
+const conflictYears = new Map();
+function conflictData(date){
+  const year=date.slice(0,4);
+  if(!conflictYears.has(year)){
+    try{const file=path.join(root,'global-map-data','ucdp',`${year}.json.gz`);conflictYears.set(year,JSON.parse(zlib.gunzipSync(fs.readFileSync(file))).byDate||{})}
+    catch(error){conflictYears.set(year,{})}
+    if(conflictYears.size>3)conflictYears.delete(conflictYears.keys().next().value);
+  }
+  return conflictYears.get(year)[date]||[];
+}
 const mime = {'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.css':'text/css; charset=utf-8'};
 function send(res,status,body,type='text/plain; charset=utf-8'){res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store'});res.end(body)}
 function wait(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
@@ -42,7 +46,7 @@ http.createServer(async(req,res)=>{
   if(u.pathname==='/api/conflicts'){
     const date=u.searchParams.get('date')||'';
     if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return send(res,400,'日期格式应为 YYYY-MM-DD');
-    const features=(conflictByDate[date]||[]).map(e=>({type:'Feature',geometry:{type:'Point',coordinates:[e[0],e[1]]},properties:{id:e[2],type:e[3],deaths:e[4],country:e[5],place:e[6],sideA:e[7],sideB:e[8],start:e[9],end:e[10]}}));
+    const features=conflictData(date).map(e=>({type:'Feature',geometry:{type:'Point',coordinates:[e[0],e[1]]},properties:{id:e[2],type:e[3],deaths:e[4],country:e[5],place:e[6],sideA:e[7],sideB:e[8],start:e[9],end:e[10]}}));
     return send(res,200,JSON.stringify({type:'FeatureCollection',features,source:'UCDP GED 26.1'}),'application/geo+json; charset=utf-8');
   }
   const requested=path.normalize(path.join(root,decodeURIComponent(u.pathname==='/'?'/index.html':u.pathname)));

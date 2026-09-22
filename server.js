@@ -28,11 +28,15 @@ http.createServer(async(req,res)=>{
   if(u.pathname==='/health')return send(res,200,'ok');
   if(u.pathname==='/api/rfi'){
     const date=u.searchParams.get('date')||'';
+    const granularity=u.searchParams.get('granularity')==='hourly'?'hourly':'daily';
+    const hour=u.searchParams.get('hour')||'00';
     if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return send(res,400,'日期格式应为 YYYY-MM-DD');
-    if(!cache.has(date)){
-      try{const [y,m,d]=date.split('-');const remote=`http://waas-nas.stanford.edu/data/jamming/${y}/${m}/${d}/heatmap.json`;cache.set(date,rfiGeojson(await fetchRemoteJson(remote)))}catch(e){console.error('Stanford heatmap fetch failed',e);return send(res,502,`无法读取 Stanford 数据：${e.message}`)}
+    if(!/^(0\d|1\d|2[0-3])$/.test(hour))return send(res,400,'小时应为 00–23');
+    const key=`rfi-${date}-${granularity}-${hour}`;
+    if(!cache.has(key)){
+      try{const [y,m,d]=date.split('-');const suffix=granularity==='hourly'?`/${hour}00/heatmap.json`:'/heatmap.json';const remote=`http://waas-nas.stanford.edu/data/jamming/${y}/${m}/${d}${suffix}`;cache.set(key,rfiGeojson(await fetchRemoteJson(remote)))}catch(e){console.error('Stanford heatmap fetch failed',e);return send(res,502,`无法读取 Stanford 数据：${e.message}`)}
     }
-    return send(res,200,JSON.stringify(cache.get(date)),'application/geo+json; charset=utf-8');
+    return send(res,200,JSON.stringify(cache.get(key)),'application/geo+json; charset=utf-8');
   }
   if(u.pathname==='/api/events'){
     const date=u.searchParams.get('date')||'';
